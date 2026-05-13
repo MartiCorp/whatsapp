@@ -8,7 +8,7 @@ app = Flask(__name__)
 #SERVIDOR_OCR_URL = "https://el-teu-servidor-ocr.com/api/v1/process"
 # Pots tenir una llista de clients autoritzats
 CLIENTS = {
-    "34600112233": {"nom": "Martí - MCorp", "funcio": "ocr_factura"},
+    "600385938": {"nom": "Martí - MCorp", "funcio": "ocr_factura"},
     "34611223344": {"nom": "Gestoria Pérez", "funcio": "reenviar_email"}
 }
 
