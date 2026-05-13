@@ -5,7 +5,7 @@ from flask import Flask, request
 app = Flask(__name__)
 
 # --- CONFIGURACIÓ DE RUTES ---
-SERVIDOR_OCR_URL = "https://el-teu-servidor-ocr.com/api/v1/process"
+#SERVIDOR_OCR_URL = "https://el-teu-servidor-ocr.com/api/v1/process"
 # Pots tenir una llista de clients autoritzats
 CLIENTS = {
     "34600112233": {"nom": "Martí - MCorp", "funcio": "ocr_factura"},
