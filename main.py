@@ -1,57 +1,86 @@
 import os
-import requests
-from flask import Flask, request
+from flask import Flask, request, render_template_string
+import base64
+from datetime import datetime
 
 app = Flask(__name__)
 
-# --- CONFIGURACIÓ DE RUTES ---
-#SERVIDOR_OCR_URL = "https://el-teu-servidor-ocr.com/api/v1/process"
-# Pots tenir una llista de clients autoritzats
-CLIENTS = {
-    "600385938": {"nom": "Martí - MCorp", "funcio": "ocr_factura"},
-    "34611223344": {"nom": "Gestoria Pérez", "funcio": "reenviar_email"}
-}
+# Llista per guardar els missatges a la RAM
+missatges_rebuts = []
 
-def processar_ocr(media_url, remetent):
-    """Envia el fitxer al servidor d'OCR."""
-    res_media = requests.get(media_url)
-    files = {'file': (f'doc_{remetent}.pdf', res_media.content)}
-    try:
-        r = requests.post(SERVIDOR_OCR_URL, files=files, data={'remetent': remetent})
-        return r.status_code == 200
-    except:
-        return False
+HTML_PAGE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp Monitor</title>
+    <meta http-equiv="refresh" content="5">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #e5ddd5; margin: 0; padding: 20px; }
+        .container { max-width: 500px; margin: auto; }
+        .card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .header { font-weight: bold; color: #075e54; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .time { font-size: 0.7em; color: #999; }
+        img { max-width: 100%; border-radius: 5px; margin-top: 10px; border: 1px solid #ddd; }
+        .text { font-size: 1em; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="text-align: center; color: #075e54;">📱 WhatsApp en Viu</h2>
+        {% for m in missatges %}
+            <div class="card">
+                <div class="header">
+                    <span>👤 {{ m.remetent }}</span>
+                    <span class="time">{{ m.hora }}</span>
+                </div>
+                <div class="text">{{ m.text }}</div>
+                {% if m.imatge %}
+                    <img src="data:{{ m.content_type }};base64,{{ m.imatge }}">
+                {% endif %}
+            </div>
+        {% endfor %}
+        {% if not missatges %}
+            <p style="text-align:center; color: #666;">Esperant missatges...</p>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    # Mostrem els últims 20 missatges
+    return render_template_string(HTML_PAGE, missatges=reversed(missatges_rebuts[-20:]))
 
 @app.route("/whatsapp", methods=['POST'])
 def webhook():
+    import requests
     dades = request.values
-    remetent = dades.get('From', '').replace('whatsapp:+', '')
+    remetent = dades.get('From', '').replace('whatsapp:', '')
+    text = dades.get('Body', '(Sense text)')
     num_media = int(dades.get('NumMedia', 0))
-    text_missatge = dades.get('Body', '').lower()
-
-    # 1. Identificar el client
-    client = CLIENTS.get(remetent)
+    hora = datetime.now().strftime("%H:%M:%S")
     
-    if not client:
-        return "<Response><Message>Ho sento, aquest número no està registrat a la plataforma.</Message></Response>", 200
+    imatge_b64 = None
+    content_type = None
 
-    # 2. Decidir acció segons el tipus de contingut
     if num_media > 0:
         media_url = dades.get('MediaUrl0')
-        
-        if client['funcio'] == "ocr_factura":
-            # ENVIAR AL SERVIDOR OCR
-            exit = processar_ocr(media_url, remetent)
-            msg = "He rebut la teva factura i l'estic analitzant. Te la veuràs a FacturaDirecta en breu." if exit else "Error en connectar amb el servidor OCR."
-        else:
-            # ALTRES LOGIQUES (Exemple: reenviaments simples)
-            msg = f"Gràcies {client['nom']}, he rebut el teu fitxer però encara no tinc configurat el reenviament."
-            
-    else:
-        # 3. Acció si només és TEXT (Chatbot)
-        msg = f"Hola {client['nom']}! Envia'm una foto d'una factura si vols que la processi."
+        content_type = dades.get('MediaContentType0')
+        # Descarreguem i convertim a base64 per mostrar-ho sense guardar fitxer
+        res = requests.get(media_url)
+        imatge_b64 = base64.b64encode(res.content).decode('utf-8')
 
-    return f"<Response><Message>{msg}</Message></Response>", 200
+    # Guardem a la memòria
+    missatges_rebuts.append({
+        "remetent": remetent,
+        "text": text,
+        "imatge": imatge_b64,
+        "content_type": content_type,
+        "hora": hora
+    })
+
+    return "<Response></Response>", 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
